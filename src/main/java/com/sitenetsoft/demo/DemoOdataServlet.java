@@ -30,9 +30,11 @@ public class DemoOdataServlet extends HttpServlet {
         ServiceMetadata serviceMetadata =
                 odata.createServiceMetadata(edmProvider, Collections.emptyList());
 
-        // assign to the field, do NOT redeclare
+        ProductRepository repo = new ProductRepository();
+
         this.handler = odata.createHandler(serviceMetadata);
-        this.handler.register(new DemoEntityCollectionProcessor(new ProductRepository()));
+        this.handler.register(new DemoEntityCollectionProcessor(repo)); // /Products
+        this.handler.register(new DemoEntityProcessor(repo));           // /Products(1)
 
         getServletContext().setAttribute("odata.handler", this.handler);
     }
