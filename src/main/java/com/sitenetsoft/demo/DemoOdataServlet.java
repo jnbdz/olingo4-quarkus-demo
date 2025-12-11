@@ -33,6 +33,8 @@ public class DemoOdataServlet extends HttpServlet {
         ProductRepository repo = new ProductRepository();
 
         this.handler = odata.createHandler(serviceMetadata);
+        // Collection processor: /odata/Products
+        this.handler.register(new DemoProductsCollectionProcessor(repo));
         this.handler.register(new DemoEntityCollectionProcessor(repo)); // /Products
         this.handler.register(new DemoEntityProcessor(repo));           // /Products(1)
 
