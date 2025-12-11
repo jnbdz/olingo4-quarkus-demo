@@ -24,6 +24,8 @@ import org.apache.olingo.server.api.serializer.SerializerResult;
 import org.apache.olingo.server.api.uri.UriInfo;
 import org.apache.olingo.server.api.uri.UriResource;
 import org.apache.olingo.server.api.uri.UriResourceEntitySet;
+import org.apache.olingo.server.api.uri.queryoption.SkipOption;
+import org.apache.olingo.server.api.uri.queryoption.TopOption;
 
 public class DemoProductsCollectionProcessor implements EntityCollectionProcessor {
 
@@ -49,7 +51,6 @@ public class DemoProductsCollectionProcessor implements EntityCollectionProcesso
             ContentType responseFormat
     ) throws ODataApplicationException, SerializerException {
 
-        // Only support GET /Products for now
         UriResource first = uriInfo.getUriResourceParts().get(0);
         UriResourceEntitySet es = (UriResourceEntitySet) first;
 
@@ -61,11 +62,25 @@ public class DemoProductsCollectionProcessor implements EntityCollectionProcesso
             );
         }
 
+        // 1) Load all products
         List<Product> products = productRepository.findAll();
 
+        // 2) Apply $skip and $top (pagination)
+        SkipOption skipOption = uriInfo.getSkipOption();
+        TopOption topOption = uriInfo.getTopOption();
+
+        int skip = (skipOption == null) ? 0 : skipOption.getValue();
+        int top = (topOption == null) ? products.size() : topOption.getValue();
+
+        int fromIndex = Math.min(skip, products.size());
+        int toIndex = Math.min(fromIndex + top, products.size());
+
+        List<Product> paged = products.subList(fromIndex, toIndex);
+
+        // 3) Map to OData EntityCollection
         EntityCollection entityCollection = new EntityCollection();
 
-        for (Product p : products) {
+        for (Product p : paged) {
             Entity e = new Entity()
                     .addProperty(new Property(null, "ID", ValueType.PRIMITIVE, p.getID()))
                     .addProperty(new Property(null, "Name", ValueType.PRIMITIVE, p.getName()))
@@ -83,7 +98,10 @@ public class DemoProductsCollectionProcessor implements EntityCollectionProcesso
         }
 
         ODataSerializer serializer = odata.createSerializer(actualFormat);
-        EntityCollectionSerializerOptions opts = EntityCollectionSerializerOptions.with().build();
+
+        EntityCollectionSerializerOptions opts = EntityCollectionSerializerOptions
+                .with()
+                .build();
 
         SerializerResult result = serializer.entityCollection(
                 serviceMetadata,

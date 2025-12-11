@@ -51,4 +51,18 @@ public class OdataEndpointTest {
                 .body("value.ID", containsInAnyOrder(1, 2, 3))
                 .body("value.Name", hasItems("Foo", "Bar", "Baz"));
     }
+
+    @Test
+    public void productById_shouldReturnSingleJson() {
+        given()
+                .accept("application/json")
+                .when()
+                .get("/odata/Products(1)?$format=json")
+                .then()
+                .statusCode(200)
+                .body("ID", equalTo(1))
+                .body("Name", equalTo("Foo"))
+                .body("Price", equalTo(10.0f)); // RestAssured treats numbers as float/double
+    }
+
 }
