@@ -1,0 +1,98 @@
+package com.sitenetsoft.demo;
+
+import java.net.URI;
+import java.util.List;
+
+import org.apache.olingo.commons.api.data.Entity;
+import org.apache.olingo.commons.api.data.EntityCollection;
+import org.apache.olingo.commons.api.data.Property;
+import org.apache.olingo.commons.api.data.ValueType;
+import org.apache.olingo.commons.api.edm.EdmEntitySet;
+import org.apache.olingo.commons.api.edm.EdmEntityType;
+import org.apache.olingo.commons.api.format.ContentType;
+import org.apache.olingo.commons.api.http.HttpStatusCode;
+import org.apache.olingo.server.api.OData;
+import org.apache.olingo.server.api.ODataApplicationException;
+import org.apache.olingo.server.api.ODataRequest;
+import org.apache.olingo.server.api.ODataResponse;
+import org.apache.olingo.server.api.ServiceMetadata;
+import org.apache.olingo.server.api.processor.EntityCollectionProcessor;
+import org.apache.olingo.server.api.serializer.EntityCollectionSerializerOptions;
+import org.apache.olingo.server.api.serializer.ODataSerializer;
+import org.apache.olingo.server.api.serializer.SerializerException;
+import org.apache.olingo.server.api.serializer.SerializerResult;
+import org.apache.olingo.server.api.uri.UriInfo;
+
+/**
+ * Demo EntityCollectionProcessor that returns Products from ProductRepository.
+ * We serialize JSON with "odata.metadata=none" so Olingo does not require a ContextURL.
+ */
+public class DemoEntityCollectionProcessor implements EntityCollectionProcessor {
+
+    private OData odata;
+    private ServiceMetadata serviceMetadata;
+    private final ProductRepository productRepository;
+
+    public DemoEntityCollectionProcessor(ProductRepository productRepository) {
+        this.productRepository = productRepository;
+    }
+
+    @Override
+    public void init(OData odata, ServiceMetadata serviceMetadata) {
+        this.odata = odata;
+        this.serviceMetadata = serviceMetadata;
+    }
+
+    @Override
+    public void readEntityCollection(
+            ODataRequest request,
+            ODataResponse response,
+            UriInfo uriInfo,
+            ContentType responseFormat
+    ) throws ODataApplicationException, SerializerException {
+
+        // Build OData entities from our domain objects
+        EntityCollection entityCollection = new EntityCollection();
+        List<Entity> entities = entityCollection.getEntities();
+
+        for (Product p : productRepository.findAll()) {
+            Entity e = new Entity()
+                    .addProperty(new Property(null, "ID", ValueType.PRIMITIVE, p.getId()))
+                    .addProperty(new Property(null, "Name", ValueType.PRIMITIVE, p.getName()))
+                    .addProperty(new Property(null, "Price", ValueType.PRIMITIVE, p.getPrice()));
+
+            // Simple ID like Products(1)
+            e.setId(URI.create("Products(" + p.getId() + ")"));
+
+            entities.add(e);
+        }
+
+        // Look up EDM info for our Products entity set
+        EdmEntitySet edmEntitySet =
+                serviceMetadata.getEdm().getEntityContainer().getEntitySet("Products");
+        EdmEntityType entityType = edmEntitySet.getEntityType();
+
+        // Force JSON with no metadata, so ContextURL is not required
+        ContentType actualFormat = responseFormat;
+        if (responseFormat != null && responseFormat.isCompatible(ContentType.APPLICATION_JSON)) {
+            actualFormat = ContentType.parse("application/json;odata.metadata=none");
+        }
+
+        ODataSerializer serializer = odata.createSerializer(actualFormat);
+
+        // No ContextURL; metadata=none makes this legal
+        EntityCollectionSerializerOptions opts =
+                EntityCollectionSerializerOptions.with().build();
+
+        SerializerResult result = serializer.entityCollection(
+                serviceMetadata,
+                entityType,
+                entityCollection,
+                opts
+        );
+
+        response.setStatusCode(HttpStatusCode.OK.getStatusCode());
+        response.setContent(result.getContent());
+        response.setHeader("Content-Type", actualFormat.toContentTypeString());
+    }
+}
