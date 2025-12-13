@@ -9,14 +9,14 @@ import org.apache.olingo.server.api.OData;
 import org.apache.olingo.server.api.ODataHttpHandler;
 import org.apache.olingo.server.api.ServiceMetadata;
 
-import java.io.IOException;
 import java.util.Collections;
+import java.io.IOException;
 
 @WebServlet(urlPatterns = "/odata/*")
 public class DemoOdataServlet extends HttpServlet {
 
     @Inject
-    DemoOlingo4Module module;   // now actually used
+    DemoOlingo4Module module;
 
     private ODataHttpHandler handler;
 
@@ -26,23 +26,26 @@ public class DemoOdataServlet extends HttpServlet {
 
         OData odata = OData.newInstance();
 
-        // Use the module to get the EDM
-        CsdlEdmProvider edmProvider = module.edmProvider();
+        CsdlEdmProvider edmProvider = new DemoEdmProvider();
         ServiceMetadata serviceMetadata =
                 odata.createServiceMetadata(edmProvider, Collections.emptyList());
 
-        // Create handler and let the module register processors
+        ProductRepository repo = new ProductRepository();
+
         this.handler = odata.createHandler(serviceMetadata);
-        module.registerProcessors(this.handler);
+
+        // Use the paged collection processor for /odata/Products
+        this.handler.register(new DemoProductsCollectionProcessor(repo));
+
+        // Use the single-entity processor for /odata/Products(1)
+        this.handler.register(new DemoEntityProcessor(repo));
 
         getServletContext().setAttribute("odata.handler", this.handler);
     }
 
     @Override
-    protected void service(
-            jakarta.servlet.http.HttpServletRequest req,
-            jakarta.servlet.http.HttpServletResponse resp
-    ) throws IOException {
+    protected void service(jakarta.servlet.http.HttpServletRequest req,
+                           jakarta.servlet.http.HttpServletResponse resp) throws IOException {
         handler.process(req, resp);
     }
 }

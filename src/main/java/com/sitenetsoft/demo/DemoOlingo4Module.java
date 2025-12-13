@@ -20,6 +20,11 @@ public class DemoOlingo4Module implements Olingo4Module {
 
     @Override
     public void registerProcessors(ODataHttpHandler handler) {
-        handler.register(new DemoEntityCollectionProcessor(productRepository));
+        // OLD:
+        // handler.register(new DemoEntityCollectionProcessor(productRepository));
+
+        // NEW:
+        handler.register(new DemoProductsCollectionProcessor(productRepository));
+        handler.register(new DemoEntityProcessor(productRepository));
     }
 }
