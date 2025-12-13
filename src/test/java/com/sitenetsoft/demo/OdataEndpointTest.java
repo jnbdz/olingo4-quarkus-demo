@@ -65,4 +65,21 @@ public class OdataEndpointTest {
                 .body("Price", equalTo(10.0f)); // RestAssured treats numbers as float/double
     }
 
+    @Test
+    void queryOptions_shouldWorkTogether() {
+        given()
+                .accept(ContentType.JSON)
+                .queryParam("$select", "Name")
+                .queryParam("$filter", "Price gt 15")
+                .queryParam("$orderby", "Name desc")
+                .queryParam("$top", "1")
+                .queryParam("$format", "json")
+                .when()
+                .get("/odata/Products")
+                .then()
+                .statusCode(200)
+                .body("value", hasSize(1))
+                .body("value[0].Name", equalTo("Baz"));
+    }
+
 }

@@ -37,7 +37,6 @@ import org.apache.olingo.server.api.uri.queryoption.OrderByItem;
 import org.apache.olingo.server.api.uri.queryoption.SkipOption;
 import org.apache.olingo.server.api.uri.queryoption.TopOption;
 import org.apache.olingo.server.api.uri.queryoption.SelectOption;
-import org.apache.olingo.server.api.uri.queryoption.SelectItem;
 
 import org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind;
 import org.apache.olingo.server.api.uri.queryoption.expression.Expression;
@@ -149,56 +148,14 @@ public class DemoProductsCollectionProcessor implements EntityCollectionProcesso
 
         List<Product> paged = products.subList(fromIndex, toIndex);
 
-        // 5) Handle $select (projection)
-        SelectOption selectOption = uriInfo.getSelectOption();
-        boolean selectAll = (selectOption == null || selectOption.getSelectItems().isEmpty());
-
-        boolean includeId    = true;
-        boolean includeName  = true;
-        boolean includePrice = true;
-
-        if (!selectAll) {
-            boolean star = selectOption.getSelectItems().stream().anyMatch(SelectItem::isStar);
-            if (star) {
-                // $select=* → all properties
-                includeId = includeName = includePrice = true;
-            } else {
-                includeId = includeName = includePrice = false;
-                for (SelectItem item : selectOption.getSelectItems()) {
-                    UriInfoResource path = item.getResourcePath();
-                    if (path == null || path.getUriResourceParts().isEmpty()) {
-                        continue;
-                    }
-                    UriResource last = path.getUriResourceParts()
-                            .get(path.getUriResourceParts().size() - 1);
-                    if (last instanceof UriResourceProperty urp) {
-                        String prop = urp.getProperty().getName();
-                        if ("ID".equals(prop)) {
-                            includeId = true;
-                        } else if ("Name".equals(prop)) {
-                            includeName = true;
-                        } else if ("Price".equals(prop)) {
-                            includePrice = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        // 6) Map to OData EntityCollection with projection
+        // 5) Map to OData EntityCollection with projection
         EntityCollection entityCollection = new EntityCollection();
 
         for (Product p : paged) {
-            Entity e = new Entity();
-            if (includeId) {
-                e.addProperty(new Property(null, "ID", ValueType.PRIMITIVE, p.getID()));
-            }
-            if (includeName) {
-                e.addProperty(new Property(null, "Name", ValueType.PRIMITIVE, p.getName()));
-            }
-            if (includePrice) {
-                e.addProperty(new Property(null, "Price", ValueType.PRIMITIVE, p.getPrice()));
-            }
+            Entity e = new Entity()
+                    .addProperty(new Property(null, "ID", ValueType.PRIMITIVE, p.getID()))
+                    .addProperty(new Property(null, "Name", ValueType.PRIMITIVE, p.getName()))
+                    .addProperty(new Property(null, "Price", ValueType.PRIMITIVE, p.getPrice()));
 
             e.setId(URI.create("Products(" + p.getID() + ")"));
             entityCollection.getEntities().add(e);
@@ -212,9 +169,14 @@ public class DemoProductsCollectionProcessor implements EntityCollectionProcesso
         }
 
         ODataSerializer serializer = odata.createSerializer(actualFormat);
-        EntityCollectionSerializerOptions opts = EntityCollectionSerializerOptions
-                .with()
-                .build();
+
+        SelectOption selectOption = uriInfo.getSelectOption();
+
+        EntityCollectionSerializerOptions.Builder builder = EntityCollectionSerializerOptions.with();
+        if (selectOption != null) {
+            builder.select(selectOption);
+        }
+        EntityCollectionSerializerOptions opts = builder.build();
 
         SerializerResult result = serializer.entityCollection(
                 serviceMetadata,
