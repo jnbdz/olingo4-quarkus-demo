@@ -46,6 +46,15 @@ import org.apache.olingo.server.core.uri.queryoption.expression.BinaryImpl;
 import org.apache.olingo.server.core.uri.queryoption.expression.LiteralImpl;
 import org.apache.olingo.server.core.uri.queryoption.expression.MemberImpl;
 
+import org.apache.olingo.server.api.uri.queryoption.expression.Binary;
+import org.apache.olingo.server.api.uri.queryoption.expression.Literal;
+import org.apache.olingo.server.api.uri.queryoption.expression.Member;
+import org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind;
+import org.apache.olingo.server.api.uri.UriInfoResource;
+import org.apache.olingo.server.api.uri.UriResourceProperty;
+import org.apache.olingo.server.api.uri.UriResource;
+import org.apache.olingo.server.api.uri.queryoption.expression.Expression;
+
 public class DemoProductsCollectionProcessor implements EntityCollectionProcessor {
 
     private final ProductRepository productRepository;
@@ -90,49 +99,37 @@ public class DemoProductsCollectionProcessor implements EntityCollectionProcesso
             products = applyFilter(filterOption.getExpression(), products);
         }
 
+        var countOption = uriInfo.getCountOption();
+        boolean includeCount = (countOption != null && Boolean.TRUE.equals(countOption.getValue()));
+
+        // after filter, before skip/top:
+        int countAfterFilter = products.size();
+
         // 3) Apply $orderby
         OrderByOption orderByOption = uriInfo.getOrderByOption();
-        if (orderByOption != null &&
-                orderByOption.getOrders() != null &&
-                !orderByOption.getOrders().isEmpty()) {
+        if (orderByOption != null && orderByOption.getOrders() != null && !orderByOption.getOrders().isEmpty()) {
 
-            OrderByItem item = orderByOption.getOrders().get(0); // demo: only first item
-            boolean desc = item.isDescending();
+            java.util.Comparator<Product> comparator = null;
 
-            Expression expr = item.getExpression();
-            if (expr instanceof Member member) {
-                UriInfoResource resourcePath = member.getResourcePath();
+            for (OrderByItem item : orderByOption.getOrders()) {
+                String propName = extractOrderByProp(item);
+                if (propName == null) continue;
 
-                String propName = null;
-                if (resourcePath != null &&
-                        !resourcePath.getUriResourceParts().isEmpty()) {
+                java.util.Comparator<Product> c = switch (propName) {
+                    case "ID" -> java.util.Comparator.comparingInt(Product::getID);
+                    case "Name" -> java.util.Comparator.comparing(Product::getName, String.CASE_INSENSITIVE_ORDER);
+                    case "Price" -> java.util.Comparator.comparingDouble(Product::getPrice);
+                    default -> null;
+                };
 
-                    UriResource last = resourcePath.getUriResourceParts()
-                            .get(resourcePath.getUriResourceParts().size() - 1);
-                    if (last instanceof UriResourceProperty) {
-                        propName = ((UriResourceProperty) last).getProperty().getName();
-                    }
-                }
+                if (c == null) continue;
+                if (item.isDescending()) c = c.reversed();
 
-                if (propName != null) {
-                    final String sortProp = propName;
+                comparator = (comparator == null) ? c : comparator.thenComparing(c);
+            }
 
-                    products.sort((a, b) -> {
-                        if ("ID".equals(sortProp)) {
-                            return Integer.compare(a.getID(), b.getID());
-                        } else if ("Name".equals(sortProp)) {
-                            return a.getName().compareToIgnoreCase(b.getName());
-                        } else if ("Price".equals(sortProp)) {
-                            return Double.compare(a.getPrice(), b.getPrice());
-                        }
-                        // Unknown property → keep original order
-                        return 0;
-                    });
-
-                    if (desc) {
-                        java.util.Collections.reverse(products);
-                    }
-                }
+            if (comparator != null) {
+                products.sort(comparator);
             }
         }
 
@@ -168,15 +165,19 @@ public class DemoProductsCollectionProcessor implements EntityCollectionProcesso
             actualFormat = ContentType.parse("application/json;odata.metadata=none");
         }
 
-        ODataSerializer serializer = odata.createSerializer(actualFormat);
-
         SelectOption selectOption = uriInfo.getSelectOption();
 
         EntityCollectionSerializerOptions.Builder builder = EntityCollectionSerializerOptions.with();
-        if (selectOption != null) {
-            builder.select(selectOption);
-        }
+        if (selectOption != null) builder.select(selectOption);
+        if (countOption != null)  builder.count(countOption);
+
         EntityCollectionSerializerOptions opts = builder.build();
+
+        if (includeCount) {
+            entityCollection.setCount(countAfterFilter);
+        }
+
+        ODataSerializer serializer = odata.createSerializer(actualFormat);
 
         SerializerResult result = serializer.entityCollection(
                 serviceMetadata,
@@ -190,40 +191,80 @@ public class DemoProductsCollectionProcessor implements EntityCollectionProcesso
         response.setHeader("Content-Type", actualFormat.toContentTypeString());
     }
 
+    private String extractOrderByProp(OrderByItem item) {
+        Expression expr = item.getExpression();
+        if (!(expr instanceof Member member)) return null;
+        UriInfoResource path = member.getResourcePath();
+        if (path == null || path.getUriResourceParts().isEmpty()) return null;
+        UriResource last = path.getUriResourceParts().get(path.getUriResourceParts().size() - 1);
+        if (!(last instanceof UriResourceProperty p)) return null;
+        return p.getProperty().getName();
+    }
+
     // ---- $filter helpers ----
 
     private List<Product> applyFilter(Expression expr, List<Product> input)
             throws ODataApplicationException {
 
-        if (!(expr instanceof BinaryImpl bin)) {
+        List<Product> out = new ArrayList<>();
+        for (Product p : input) {
+            if (evalBoolean(expr, p)) {
+                out.add(p);
+            }
+        }
+        return out;
+    }
+
+    private boolean evalBoolean(Expression expr, Product p) throws ODataApplicationException {
+        if (!(expr instanceof Binary bin)) {
             throw new ODataApplicationException(
-                    "Only simple binary filters are supported",
+                    "Only binary expressions are supported in this demo",
                     HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(),
                     Locale.ENGLISH
             );
         }
 
-        Expression left  = bin.getLeftOperand();
-        Expression right = bin.getRightOperand();
         BinaryOperatorKind op = bin.getOperator();
 
-        if (!(left instanceof MemberImpl) || !(right instanceof LiteralImpl)) {
+        // Logical
+        if (op == BinaryOperatorKind.AND) {
+            return evalBoolean(bin.getLeftOperand(), p) && evalBoolean(bin.getRightOperand(), p);
+        }
+        if (op == BinaryOperatorKind.OR) {
+            return evalBoolean(bin.getLeftOperand(), p) || evalBoolean(bin.getRightOperand(), p);
+        }
+
+        // Comparisons: (Member op Literal)
+        Expression left = bin.getLeftOperand();
+        Expression right = bin.getRightOperand();
+
+        if (!(left instanceof Member member) || !(right instanceof Literal lit)) {
             throw new ODataApplicationException(
-                    "Filter must be: Property op Literal",
+                    "Filter must be: Property op Literal (or combined with and/or)",
                     HttpStatusCode.BAD_REQUEST.getStatusCode(),
                     Locale.ENGLISH
             );
         }
 
-        MemberImpl member = (MemberImpl) left;
-        UriInfoResource path = member.getResourcePath();
-        String propName = ((UriResourceProperty)
-                path.getUriResourceParts().get(path.getUriResourceParts().size() - 1)
-        ).getProperty().getName();
+        String prop = extractPropName(member);
+        String raw = unquote(lit.getText());
 
-        String raw = unquote(((LiteralImpl) right).getText());
+        return matches(p, prop, op, raw);
+    }
 
-        return filterByOperator(input, propName, op, raw);
+    private String extractPropName(Member member) throws ODataApplicationException {
+        UriInfoResource resourcePath = member.getResourcePath();
+        if (resourcePath == null || resourcePath.getUriResourceParts().isEmpty()) {
+            throw new ODataApplicationException("Invalid member in $filter",
+                    HttpStatusCode.BAD_REQUEST.getStatusCode(), Locale.ENGLISH);
+        }
+
+        UriResource last = resourcePath.getUriResourceParts().get(resourcePath.getUriResourceParts().size() - 1);
+        if (!(last instanceof UriResourceProperty prop)) {
+            throw new ODataApplicationException("Only property members are supported in $filter",
+                    HttpStatusCode.BAD_REQUEST.getStatusCode(), Locale.ENGLISH);
+        }
+        return prop.getProperty().getName();
     }
 
     private List<Product> filterByOperator(List<Product> items, String prop,

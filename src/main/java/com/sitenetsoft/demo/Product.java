@@ -5,6 +5,7 @@ public class Product {
     private Integer ID;
     private String Name;
     private Double Price;
+    private Integer CategoryID;
 
     public Product() {
     }
@@ -38,4 +39,7 @@ public class Product {
     public void setPrice(Double price) {
         this.Price = price;
     }
+
+    public Integer getCategoryID() { return CategoryID; }
+    public void setCategoryID(Integer categoryID) { this.CategoryID = categoryID; }
 }

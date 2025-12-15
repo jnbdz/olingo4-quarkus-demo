@@ -26,5 +26,6 @@ public class DemoOlingo4Module implements Olingo4Module {
         // NEW:
         handler.register(new DemoProductsCollectionProcessor(productRepository));
         handler.register(new DemoEntityProcessor(productRepository));
+        handler.register(new DemoProductsCountProcessor(productRepository));
     }
 }

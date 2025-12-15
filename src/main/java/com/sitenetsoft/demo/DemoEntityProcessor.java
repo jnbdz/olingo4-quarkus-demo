@@ -24,6 +24,7 @@ import org.apache.olingo.server.api.uri.UriInfo;
 import org.apache.olingo.server.api.uri.UriParameter;
 import org.apache.olingo.server.api.uri.UriResource;
 import org.apache.olingo.server.api.uri.UriResourceEntitySet;
+import org.apache.olingo.server.api.uri.queryoption.SelectOption;
 
 public class DemoEntityProcessor implements EntityProcessor {
 
@@ -100,14 +101,21 @@ public class DemoEntityProcessor implements EntityProcessor {
             actualFormat = ContentType.parse("application/json;odata.metadata=none");
         }
 
+        // Read $select option (if any)
+        SelectOption selectOption = uriInfo.getSelectOption();
+
+        EntitySerializerOptions.Builder optsBuilder = EntitySerializerOptions.with();
+        if (selectOption != null) {
+            optsBuilder.select(selectOption);
+        }
+
         ODataSerializer serializer = odata.createSerializer(actualFormat);
-        EntitySerializerOptions opts = EntitySerializerOptions.with().build();
 
         SerializerResult result = serializer.entity(
                 serviceMetadata,
                 entityType,
                 e,
-                opts
+                optsBuilder.build()
         );
 
         response.setStatusCode(HttpStatusCode.OK.getStatusCode());
