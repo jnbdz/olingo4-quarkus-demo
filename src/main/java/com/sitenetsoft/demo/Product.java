@@ -10,10 +10,11 @@ public class Product {
     public Product() {
     }
 
-    public Product(Integer ID, String name, Double price) {
-        this.ID = ID;
+    public Product(Integer id, String name, Double price, Integer categoryId) {
+        this.ID = id;
         this.Name = name;
         this.Price = price;
+        this.CategoryID = categoryId;
     }
 
     public Integer getID() {

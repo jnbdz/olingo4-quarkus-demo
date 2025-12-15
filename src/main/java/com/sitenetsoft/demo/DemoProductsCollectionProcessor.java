@@ -31,12 +31,7 @@ import org.apache.olingo.server.api.uri.UriResourceEntitySet;
 import org.apache.olingo.server.api.uri.UriInfoResource;
 import org.apache.olingo.server.api.uri.UriResourceProperty;
 
-import org.apache.olingo.server.api.uri.queryoption.FilterOption;
-import org.apache.olingo.server.api.uri.queryoption.OrderByOption;
-import org.apache.olingo.server.api.uri.queryoption.OrderByItem;
-import org.apache.olingo.server.api.uri.queryoption.SkipOption;
-import org.apache.olingo.server.api.uri.queryoption.TopOption;
-import org.apache.olingo.server.api.uri.queryoption.SelectOption;
+import org.apache.olingo.server.api.uri.queryoption.*;
 
 import org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind;
 import org.apache.olingo.server.api.uri.queryoption.expression.Expression;
@@ -170,6 +165,9 @@ public class DemoProductsCollectionProcessor implements EntityCollectionProcesso
         EntityCollectionSerializerOptions.Builder builder = EntityCollectionSerializerOptions.with();
         if (selectOption != null) builder.select(selectOption);
         if (countOption != null)  builder.count(countOption);
+
+        ExpandOption expand = uriInfo.getExpandOption();
+        builder.expand(expand);
 
         EntityCollectionSerializerOptions opts = builder.build();
 
