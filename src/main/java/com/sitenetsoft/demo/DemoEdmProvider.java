@@ -37,7 +37,7 @@ public class DemoEdmProvider extends CsdlAbstractEdmProvider {
     // Category
     public static final String ET_CATEGORY_NAME = "Category";
     public static final FullQualifiedName ET_CATEGORY_FQN =
-            new FullQualifiedName(NAMESPACE, CONTAINER_NAME);
+            new FullQualifiedName(NAMESPACE, ET_CATEGORY_NAME);
 
     @Override
     public List<CsdlSchema> getSchemas() {

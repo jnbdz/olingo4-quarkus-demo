@@ -37,24 +37,18 @@ import org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKin
 import org.apache.olingo.server.api.uri.queryoption.expression.Expression;
 import org.apache.olingo.server.api.uri.queryoption.expression.Member;
 
-import org.apache.olingo.server.core.uri.queryoption.expression.BinaryImpl;
-import org.apache.olingo.server.core.uri.queryoption.expression.LiteralImpl;
-import org.apache.olingo.server.core.uri.queryoption.expression.MemberImpl;
-
 import org.apache.olingo.server.api.uri.queryoption.expression.Binary;
 import org.apache.olingo.server.api.uri.queryoption.expression.Literal;
-import org.apache.olingo.server.api.uri.queryoption.expression.Member;
-import org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind;
-import org.apache.olingo.server.api.uri.UriInfoResource;
-import org.apache.olingo.server.api.uri.UriResourceProperty;
-import org.apache.olingo.server.api.uri.UriResource;
-import org.apache.olingo.server.api.uri.queryoption.expression.Expression;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 public class DemoProductsCollectionProcessor implements EntityCollectionProcessor {
 
     private final ProductRepository productRepository;
     private OData odata;
     private ServiceMetadata serviceMetadata;
+
+    @ConfigProperty(name = "demo.odata.max-page-size", defaultValue = "200")
+    int maxPageSize;
 
     public DemoProductsCollectionProcessor(ProductRepository productRepository) {
         this.productRepository = productRepository;
@@ -130,13 +124,15 @@ public class DemoProductsCollectionProcessor implements EntityCollectionProcesso
 
         // 4) Apply $skip and $top (pagination)
         SkipOption skipOption = uriInfo.getSkipOption();
-        TopOption topOption   = uriInfo.getTopOption();
+        TopOption  topOption  = uriInfo.getTopOption();
 
-        int skip = (skipOption == null) ? 0 : skipOption.getValue();
-        int top  = (topOption == null)   ? products.size() : topOption.getValue();
+        int skip = (skipOption == null) ? 0 : Math.max(0, skipOption.getValue());
+
+        int requestedTop = (topOption == null) ? maxPageSize : Math.max(0, topOption.getValue());
+        int effectiveTop = Math.min(requestedTop, maxPageSize);
 
         int fromIndex = Math.min(skip, products.size());
-        int toIndex   = Math.min(fromIndex + top, products.size());
+        int toIndex   = Math.min(fromIndex + effectiveTop, products.size());
 
         List<Product> paged = products.subList(fromIndex, toIndex);
 
@@ -168,6 +164,12 @@ public class DemoProductsCollectionProcessor implements EntityCollectionProcesso
 
         ExpandOption expand = uriInfo.getExpandOption();
         builder.expand(expand);
+
+        if (toIndex < products.size()) {
+            int returned = toIndex - fromIndex; // could be < effectiveTop at end
+            URI next = buildNextLink(request, skip + returned, effectiveTop);
+            entityCollection.setNext(next);
+        }
 
         EntityCollectionSerializerOptions opts = builder.build();
 
@@ -325,5 +327,25 @@ public class DemoProductsCollectionProcessor implements EntityCollectionProcesso
             return text.substring(1, text.length() - 1);
         }
         return text;
+    }
+
+    private URI buildNextLink(ODataRequest request, int nextSkip, int top) {
+        String raw = request.getRawRequestUri();      // e.g. http://localhost:8081/odata/Products
+        String qs  = request.getRawQueryPath();       // e.g. $top=5000&$format=json
+
+        // strip existing $skip=...
+        String cleaned = (qs == null || qs.isBlank()) ? "" :
+                qs.replaceAll("(^|&)%24skip=\\d+(&|$)", "$1").replaceAll("&&", "&").replaceAll("^&|&$", "");
+
+        StringBuilder sb = new StringBuilder(raw).append("?");
+        if (!cleaned.isBlank()) sb.append(cleaned).append("&");
+        sb.append("%24skip=").append(nextSkip);
+
+        // optional: keep the (effective) top stable across pages
+        if (!sb.toString().contains("%24top=")) {
+            sb.append("&%24top=").append(top);
+        }
+
+        return URI.create(sb.toString());
     }
 }

@@ -14,7 +14,12 @@ public class ProductRepository {
     public ProductRepository() {
         List<Product> tmp = new ArrayList<>();
         for (int i = 1; i <= 50; i++) {
-            Product p = new Product(i, "Product " + i, (double) (i * 1.25));
+            Product p = new Product(
+                    i,
+                    "Product " + i,
+                    (double) (i * 1.25),
+                    ((i - 1) % 5) + 1
+            );
             // 5 categories: 1..5
             p.setCategoryID(((i - 1) % 5) + 1);
             tmp.add(p);

@@ -1,6 +1,7 @@
 package com.sitenetsoft.demo;
 
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.TestProfile;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.Test;
 
@@ -61,8 +62,8 @@ public class OdataEndpointTest {
                 .then()
                 .statusCode(200)
                 .body("ID", equalTo(1))
-                .body("Name", equalTo("Foo"))
-                .body("Price", equalTo(10.0f)); // RestAssured treats numbers as float/double
+                .body("Name", equalTo("Product 1"))
+                .body("Price", equalTo(1.25f));
     }
 
     @Test
@@ -141,8 +142,8 @@ public class OdataEndpointTest {
                 .then()
                 .statusCode(200)
                 .body("value", hasSize(1))
-                .body("value[0].Name", equalTo("Baz"))
-                .body("value[0].Price", equalTo(42.0f));
+                .body("value[0].Name", equalTo("Product 50"))
+                .body("value[0].Price", equalTo(62.5f));
     }
 
     @Test
@@ -192,14 +193,15 @@ public class OdataEndpointTest {
     void filterWithAnd_shouldWork() {
         given()
                 .accept(ContentType.JSON)
-                .queryParam("$filter", "Price gt 15 and ID lt 3")
+                .queryParam("$filter", "Price gt 2 and ID lt 3")
                 .queryParam("$format", "json")
                 .when()
                 .get("/odata/Products")
                 .then()
                 .statusCode(200)
                 .body("value", hasSize(1))
-                .body("value[0].Name", equalTo("Bar"));
+                .body("value[0].ID", equalTo(2))
+                .body("value[0].Name", equalTo("Product 2"));
     }
 
     @Test
